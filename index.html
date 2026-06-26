@@ -49,8 +49,6 @@ canvas { position:fixed; inset:0; }
 .sbf { height:100%; background:linear-gradient(90deg,#00ffff,#ff4400); border-radius:2px; transition:width .3s; }
 #scanlines { position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px); pointer-events:none; z-index:20; }
 #vignette { position:fixed; inset:0; background:radial-gradient(ellipse at center,transparent 55%,#0a0a0f99 100%); pointer-events:none; z-index:19; }
-
-/* Share button */
 .share-btn {
   margin-top:4px; padding:10px 28px;
   background:transparent; border:1.5px solid #00ffff55;
@@ -62,22 +60,62 @@ canvas { position:fixed; inset:0; }
 }
 .share-btn:hover { background:#00ffff22; box-shadow:0 0 24px #00ffff44; }
 .share-btn:active { transform:scale(.97); }
-/* Watermark */
 #watermark {
   position:fixed; bottom:8px; left:0; right:0;
   text-align:center; font-size:11px; color:#ffffff18;
   letter-spacing:2px; pointer-events:none; z-index:15;
   font-family:'Courier New',monospace;
 }
-/* Start screen best score */
 .menu-best { font-size:clamp(13px,2vw,17px); color:#ffaa0099; letter-spacing:4px; }
 .menu-best span { color:#ffcc44; text-shadow:0 0 12px #ffaa00; }
-/* Pulsing glow on title */
 @keyframes titleglow {
   0%,100%{text-shadow:0 0 10px #00ffff,0 0 20px #00ffff,0 0 40px #00ffff,0 0 80px #00aaff,0 0 120px #0055ff}
   50%{text-shadow:0 0 20px #00ffff,0 0 40px #00ffff,0 0 80px #00ffff,0 0 140px #00aaff,0 0 200px #0055ff,0 0 260px #0033cc}
 }
 .neon-title { animation:flicker 4s infinite, titleglow 2.5s ease-in-out infinite; }
+#replay-overlay {
+  display:none; position:fixed; inset:0; z-index:50;
+  background:#0a0a0f; flex-direction:column;
+}
+#replay-overlay.visible { display:flex; }
+#replay-canvas {
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  image-rendering:crisp-edges;
+}
+#replay-ui {
+  position:absolute; bottom:0; left:0; right:0;
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  padding:16px; background:linear-gradient(transparent,rgba(0,0,0,0.7));
+  pointer-events:all;
+}
+.replay-controls { display:flex; gap:12px; align-items:center; }
+.rc-btn {
+  padding:8px 20px; background:transparent;
+  border:1.5px solid #00ffff55; color:#00ffff99;
+  font-family:'Courier New',monospace; font-size:12px;
+  letter-spacing:2px; cursor:pointer; transition:all .15s;
+  text-transform:uppercase;
+}
+.rc-btn:hover { background:#00ffff18; color:#00ffff; border-color:#00ffff; }
+.rc-btn.cancel { border-color:#ff444466; color:#ff4444aa; }
+.rc-btn.cancel:hover { background:#ff444418; color:#ff4444; border-color:#ff4444; }
+.replay-scrub {
+  -webkit-appearance:none; appearance:none;
+  width:min(500px,70vw); height:4px; background:#00ffff22;
+  outline:none; border-radius:2px; cursor:pointer;
+}
+.replay-scrub::-webkit-slider-thumb {
+  -webkit-appearance:none; width:12px; height:12px;
+  border-radius:50%; background:#00ffff; box-shadow:0 0 10px #00ffff;
+}
+#replay-title { font-size:11px; color:#00ffff66; letter-spacing:4px; text-transform:uppercase; pointer-events:none; }
+#pause-overlay {
+  display:none; position:fixed; inset:0; z-index:30;
+  align-items:center; justify-content:center; flex-direction:column; gap:16px;
+  background:rgba(0,0,0,0.55);
+}
+#pause-overlay.visible { display:flex; }
 </style>
 </head>
 <body>
@@ -87,28 +125,16 @@ canvas { position:fixed; inset:0; }
 
 <div id="hud">
   <div style="display:flex;gap:28px;align-items:flex-start">
-    <div class="hb">
-      <div class="hl">SCORE</div>
-      <div class="hv" id="hs">0</div>
-    </div>
-    <div class="hb">
-      <div class="hl">BEST</div>
-      <div class="hv" id="hb" style="color:#ffaa00;text-shadow:0 0 10px #ff8800">0</div>
-    </div>
-    <div class="hb">
-      <div class="hl">TIME</div>
-      <div class="hv" id="htm" style="font-size:16px;color:#aaffaa;text-shadow:0 0 8px #00ff88">0s</div>
-    </div>
+    <div class="hb"><div class="hl">SCORE</div><div class="hv" id="hs">0</div></div>
+    <div class="hb"><div class="hl">BEST</div><div class="hv" id="hb" style="color:#ffaa00;text-shadow:0 0 10px #ff8800">0</div></div>
+    <div class="hb"><div class="hl">TIME</div><div class="hv" id="htm" style="font-size:16px;color:#aaffaa;text-shadow:0 0 8px #00ff88">0s</div></div>
   </div>
   <div class="hb" style="align-items:center">
     <div class="hl">MULTIPLIER</div>
     <div class="hv" id="hmult" style="font-size:28px;text-align:center">1.0x</div>
     <div class="sbw"><div class="sbb"><div class="sbf" id="sb" style="width:10%"></div></div><div class="hv" id="hsp" style="font-size:14px">SPD 1.0x</div></div>
   </div>
-  <div class="hb" style="align-items:flex-end">
-    <div class="hl">LEVEL</div>
-    <div class="hv" id="hlvl" style="color:#cc88ff;text-shadow:0 0 12px #aa44ff;font-size:28px">1</div>
-  </div>
+  <div class="hb" style="align-items:flex-end"><div class="hl">LEVEL</div><div class="hv" id="hlvl" style="color:#cc88ff;text-shadow:0 0 12px #aa44ff;font-size:28px">1</div></div>
 </div>
 
 <div id="ui">
@@ -117,7 +143,7 @@ canvas { position:fixed; inset:0; }
     <div class="subtitle">How long can you survive?</div>
     <div class="divider"></div>
     <div class="menu-best" id="menu-best" style="display:none">BEST &nbsp; <span id="menu-best-val">0</span></div>
-    <div class="tagline">↑ ↓ &nbsp;&nbsp; W S &nbsp;&nbsp; or tap buttons below</div>
+    <div class="tagline">&#8593; &#8595; &nbsp;&nbsp; W S &nbsp;&nbsp; &mdash; Space to Pause</div>
     <div class="prompt" id="start-prompt">Press Space to Start</div>
   </div>
   <div class="screen" id="s-over">
@@ -128,9 +154,30 @@ canvas { position:fixed; inset:0; }
     <div class="divider"></div>
     <div class="hs-label" id="hsl">Best Run</div>
     <div class="hs-val" id="hsv">0</div>
-    <button class="share-btn" id="share-btn" onclick="shareScore()">📋 Share Score</button>
-    <div class="prompt">Space or tap to Restart</div>
+    <div style="display:flex;gap:12px;pointer-events:all;margin-top:4px">
+      <button class="share-btn" id="share-btn" onclick="shareScore()">&#128203; Share Score</button>
+      <button class="share-btn" id="watch-replay-btn" onclick="openReplay()" style="border-color:#cc88ff55;color:#cc88ff;text-shadow:0 0 8px #aa44ff;box-shadow:0 0 12px #aa44ff22">&#9654; Watch Replay</button>
+    </div>
+    <div class="prompt">Press Space to Restart</div>
   </div>
+</div>
+
+<div id="replay-overlay">
+  <canvas id="replay-canvas"></canvas>
+  <div id="replay-ui">
+    <div id="replay-title">&#9654; REPLAY &mdash; Press ESC or Cancel to return</div>
+    <input class="replay-scrub" id="replay-scrub" type="range" min="0" value="0" oninput="replayScrub(this.value)">
+    <div class="replay-controls">
+      <button class="rc-btn" id="btn-play" onclick="replayToggle()">&#9208; PAUSE</button>
+      <button class="rc-btn" id="btn-speed" onclick="replayCycleSpeed()">1x</button>
+      <button class="rc-btn cancel" onclick="closeReplay()">&#10005; Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="pause-overlay">
+  <div style="font-size:clamp(32px,6vw,72px);font-weight:900;letter-spacing:10px;color:#00ffff;text-shadow:0 0 20px #00ffff,0 0 40px #00aaff;animation:titleglow 2s infinite">PAUSED</div>
+  <div style="font-size:clamp(12px,2vw,16px);color:#ffffff66;letter-spacing:4px">Press Space to Resume</div>
 </div>
 
 <script>
@@ -141,62 +188,41 @@ function resize() { W = canvas.width = window.innerWidth; H = canvas.height = wi
 resize();
 window.addEventListener('resize', resize);
 
-// STATE
-const S = { START:0, PLAY:1, OVER:2 };
+const S = { START:0, PLAY:1, OVER:2, PAUSE:3 };
 let state = S.START;
 let score, startTime, lastSpeed, lastMultUp;
-let player, obs, parts, trail, floatTexts;
+let player, obs=[], parts=[], trail=[], floatTexts=[];
 let obsTimer, obsInterval, baseSpd, curSpd, mult, scoreMult;
+let obsIdCounter = 0;
 let shakeAmt = 0, shakeTil = 0;
 let keys = {};
-let level = 1, lastLevelScore = 0;
-let levelUpAnim = 0; // timestamp when level-up started (0 = none)
-let newRecordAnim = 0;
-let bgHueIdx = 0;
-const BG_HUES = [
-  [10,10,15],    // default near-black
-  [5,5,20],      // dark blue
-  [15,5,20],     // dark purple
-  [20,5,5],      // dark red
-  [5,15,8],      // dark green
-];
-// High score persisted in localStorage
+let level = 1, lastLevelScore = 0, levelUpAnim = 0, newRecordAnim = 0, bgHueIdx = 0;
+const BG_HUES = [[10,10,15],[5,5,20],[15,5,20],[20,5,5],[5,15,8]];
 let best = parseInt(localStorage.getItem('voidrunner_best') || '0');
 
-// ── Wormhole state ────────────────────────────────────────
-let wormhole = null;          // the portal object on screen (or null)
-let wormholeNextSpawn = 0;    // ms timestamp when next wormhole may spawn
-let wormholeMode = false;     // currently IN wormhole mode?
-let wormholeEnd = 0;          // ms timestamp when wormhole mode ends
-let wormholePreMult = 1.0;    // scoreMult before wormhole
-let wormholePreSpd = 1.0;     // speed mult before wormhole
-let wormholePreCurSpd = 0;    // curSpd before wormhole
-let wormholeEnterTime = 0;    // when wormhole mode started
-let wormholeBonusAdded = false;
-let wormholeWhir = null;      // audio node
-let wormholeWhirGain = null;
-let screenFlash = 0;          // opacity of white flash (0-1)
-let wormholeExitAnim = 0;     // timestamp of exit anim
+// Wormhole state
+let wormhole = null, wormholeNextSpawn = 0, wormholeMode = false;
+let wormholeEnd = 0, wormholePreMult = 1.0, wormholePreSpd = 1.0, wormholePreCurSpd = 0;
+let wormholeEnterTime = 0, wormholeBonusAdded = false;
+let wormholeWhir = null, wormholeWhirGain = null;
+let screenFlash = 0, wormholeExitAnim = 0;
 
-// ── Menu decorative obstacles ─────────────────────────────
+// Replay
+const REPLAY_FPS = 30, REPLAY_INTERVAL = 1000/30, REPLAY_MAX_FRAMES = 4500;
+let replayFrames = [], lastReplayCap = 0, replayPlaying = false;
+let replayCurFrame = 0, replaySpeedIdx = 0;
+const REPLAY_SPEEDS = [1,2,0.5], REPLAY_SPEED_LABELS = ['1x','2x','0.5x'];
+let replayRAF = null, replayLastT = 0, replayRunScore = 0, replayRunTime = 0;
+let RC = null, RX = null;
+
+// Menu obstacles
 let menuObs = [];
 function initMenuObs() {
   menuObs = [];
-  for (let i = 0; i < 5; i++) {
-    menuObs.push({
-      x: Math.random()*W,
-      y: Math.random()*H,
-      w: 15+Math.random()*10,
-      h: 40+Math.random()*80,
-      spd: .4+Math.random()*.8,
-      hue: 10+Math.random()*30,
-      a: .12+Math.random()*.18
-    });
-  }
+  for (let i=0;i<5;i++) menuObs.push({x:Math.random()*W,y:Math.random()*H,w:15+Math.random()*10,h:40+Math.random()*80,spd:.4+Math.random()*.8,hue:10+Math.random()*30,a:.12+Math.random()*.18});
 }
 initMenuObs();
 
-// ── Best score on menu ────────────────────────────────────
 function updateMenuBest() {
   const mb = document.getElementById('menu-best');
   const mbv = document.getElementById('menu-best-val');
@@ -205,959 +231,280 @@ function updateMenuBest() {
 }
 updateMenuBest();
 
-// ── Web Audio ─────────────────────────────────────────────
-let audioCtx = null;
-let droneNode = null, droneGain = null;
-function getAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  return audioCtx;
+// Pause
+let pauseStartTime = 0;
+function togglePause() {
+  if (state===S.PLAY) {
+    state=S.PAUSE; pauseStartTime=performance.now();
+    document.getElementById('pause-overlay').classList.add('visible');
+    try{if(droneGain)droneGain.gain.linearRampToValueAtTime(0.02,audioCtx.currentTime+0.3);}catch(e){}
+  } else if (state===S.PAUSE) {
+    state=S.PLAY;
+    const pf=performance.now()-pauseStartTime;
+    startTime+=pf; lastSpeed+=pf; lastMultUp+=pf;
+    if(wormholeMode){wormholeEnd+=pf;wormholeEnterTime+=pf;}
+    if(wormholeNextSpawn>0)wormholeNextSpawn+=pf;
+    shakeTil+=pf;
+    document.getElementById('pause-overlay').classList.remove('visible');
+    try{if(droneGain)droneGain.gain.linearRampToValueAtTime(0.35,audioCtx.currentTime+0.3);}catch(e){}
+  }
 }
-function startDrone() {
-  try {
-    const ac = getAudio();
-    if (droneNode) { try{droneNode.stop();}catch(e){} droneNode = null; }
 
-    // Master gain — fades in over 1s
-    droneGain = ac.createGain();
-    droneGain.gain.setValueAtTime(0, ac.currentTime);
-    droneGain.gain.linearRampToValueAtTime(0.35, ac.currentTime + 1.0);
-    droneGain.connect(ac.destination);
-
-    // Low-pass to keep it rumbly, cut harshness above ~300Hz
-    const lpf = ac.createBiquadFilter();
-    lpf.type = 'lowpass'; lpf.frequency.value = 300; lpf.Q.value = 1.2;
-    lpf.connect(droneGain);
-
-    // Slight overdrive via waveshaper for grit without buzz
-    const wave = ac.createWaveShaper();
-    const curve = new Float32Array(256);
-    for (let i=0;i<256;i++){const x=i*2/256-1; curve[i]=x*(1.5+Math.abs(x))/(1+Math.abs(x)*1.5);}
-    wave.curve = curve;
-    wave.connect(lpf);
-
-    // Core engine: two triangle waves at 90Hz & 135Hz (power chord interval)
-    const o1 = ac.createOscillator(); o1.type='triangle'; o1.frequency.value=90;
-    const o2 = ac.createOscillator(); o2.type='triangle'; o2.frequency.value=135;
-    const g1 = ac.createGain(); g1.gain.value=0.6;
-    const g2 = ac.createGain(); g2.gain.value=0.35;
-    o1.connect(g1); g1.connect(wave);
-    o2.connect(g2); g2.connect(wave);
-
-    // Pulse LFO at ~2Hz — gives the throbbing engine heartbeat
-    const lfo = ac.createOscillator(); lfo.type='sine'; lfo.frequency.value=2.0;
-    const lfoG = ac.createGain(); lfoG.gain.value=0.18;
-    lfo.connect(lfoG); lfoG.connect(droneGain.gain);
-
-    // Sub-bass rumble at 45Hz
-    const sub = ac.createOscillator(); sub.type='sine'; sub.frequency.value=45;
-    const subG = ac.createGain(); subG.gain.value=0.25;
-    sub.connect(subG); subG.connect(droneGain);
-
+// Audio
+let audioCtx=null, droneNode=null, droneGain=null;
+function getAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
+function startDrone(){
+  try{
+    const ac=getAudio();
+    if(droneNode){try{droneNode.stop();}catch(e){}droneNode=null;}
+    droneGain=ac.createGain();droneGain.gain.setValueAtTime(0,ac.currentTime);droneGain.gain.linearRampToValueAtTime(0.35,ac.currentTime+1.0);droneGain.connect(ac.destination);
+    const lpf=ac.createBiquadFilter();lpf.type='lowpass';lpf.frequency.value=300;lpf.Q.value=1.2;lpf.connect(droneGain);
+    const wave=ac.createWaveShaper();const curve=new Float32Array(256);
+    for(let i=0;i<256;i++){const x=i*2/256-1;curve[i]=x*(1.5+Math.abs(x))/(1+Math.abs(x)*1.5);}
+    wave.curve=curve;wave.connect(lpf);
+    const o1=ac.createOscillator();o1.type='triangle';o1.frequency.value=90;
+    const o2=ac.createOscillator();o2.type='triangle';o2.frequency.value=135;
+    const g1=ac.createGain();g1.gain.value=0.6;const g2=ac.createGain();g2.gain.value=0.35;
+    o1.connect(g1);g1.connect(wave);o2.connect(g2);g2.connect(wave);
+    const lfo=ac.createOscillator();lfo.type='sine';lfo.frequency.value=2.0;
+    const lfoG=ac.createGain();lfoG.gain.value=0.18;lfo.connect(lfoG);lfoG.connect(droneGain.gain);
+    const sub=ac.createOscillator();sub.type='sine';sub.frequency.value=45;
+    const subG=ac.createGain();subG.gain.value=0.25;sub.connect(subG);subG.connect(droneGain);
     [o1,o2,sub,lfo].forEach(o=>o.start());
+    droneNode={_o1:o1,_o2:o2,_sub:sub,_lfo:lfo,stop(){[o1,o2,sub,lfo].forEach(o=>{try{o.stop();}catch(e){}});}};
+  }catch(e){}
+}
+function updateDronePitch(){
+  try{if(!droneNode)return;const t=Math.min((mult-1)/4,1);droneNode._o1.frequency.value=90+t*70;droneNode._o2.frequency.value=135+t*105;droneNode._sub.frequency.value=45+t*35;droneNode._lfo.frequency.value=2.0+t*4.0;}catch(e){}
+}
+function stopDrone(){try{if(droneGain)droneGain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.3);setTimeout(()=>{if(droneNode){try{droneNode.stop();}catch(e){}droneNode=null;}},400);}catch(e){}}
+function playWhoosh(){try{const ac=getAudio();const dur=0.25;const buf=ac.createBuffer(1,ac.sampleRate*dur,ac.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*0.6;const src=ac.createBufferSource();src.buffer=buf;const bpf=ac.createBiquadFilter();bpf.type='bandpass';bpf.frequency.value=900;bpf.Q.value=0.4;const g=ac.createGain();g.gain.setValueAtTime(0,ac.currentTime);g.gain.linearRampToValueAtTime(0.5,ac.currentTime+0.06);g.gain.linearRampToValueAtTime(0,ac.currentTime+dur);src.connect(bpf);bpf.connect(g);g.connect(ac.destination);src.start();}catch(e){}}
+function playObstacleApproach(){try{const ac=getAudio();const dur=0.9;const osc=ac.createOscillator();osc.type='sawtooth';osc.frequency.setValueAtTime(140,ac.currentTime);osc.frequency.linearRampToValueAtTime(70,ac.currentTime+dur);const lpf=ac.createBiquadFilter();lpf.type='lowpass';lpf.frequency.value=200;const g=ac.createGain();g.gain.setValueAtTime(0,ac.currentTime);g.gain.linearRampToValueAtTime(0.28,ac.currentTime+0.6);g.gain.linearRampToValueAtTime(0,ac.currentTime+dur);osc.connect(lpf);lpf.connect(g);g.connect(ac.destination);osc.start();osc.stop(ac.currentTime+dur);}catch(e){}}
+function playExplosion(){try{const ac=getAudio();const buf=ac.createBuffer(1,ac.sampleRate*0.5,ac.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.5);const src=ac.createBufferSource();src.buffer=buf;const gain=ac.createGain();gain.gain.setValueAtTime(0.6,ac.currentTime);gain.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.5);src.connect(gain);gain.connect(ac.destination);src.start();}catch(e){}}
+function playLevelUp(){try{const ac=getAudio();[440,554,659,880].forEach((freq,i)=>{const osc=ac.createOscillator();osc.type='sine';osc.frequency.value=freq;const g=ac.createGain();const t=ac.currentTime+i*0.12;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.15,t+0.04);g.gain.linearRampToValueAtTime(0,t+0.18);osc.connect(g);g.connect(ac.destination);osc.start(t);osc.stop(t+0.2);});}catch(e){}}
+function startWormholeWhir(){try{const ac=getAudio();wormholeWhirGain=ac.createGain();wormholeWhirGain.gain.setValueAtTime(0,ac.currentTime);wormholeWhirGain.gain.linearRampToValueAtTime(0.22,ac.currentTime+0.5);wormholeWhirGain.connect(ac.destination);const o1=ac.createOscillator();o1.type='sine';o1.frequency.value=880;const o2=ac.createOscillator();o2.type='sine';o2.frequency.value=1320;const lfo=ac.createOscillator();lfo.frequency.value=8;const lfoG=ac.createGain();lfoG.gain.value=120;lfo.connect(lfoG);lfoG.connect(o1.frequency);lfoG.connect(o2.frequency);const g1=ac.createGain();g1.gain.value=0.6;const g2=ac.createGain();g2.gain.value=0.4;o1.connect(g1);g1.connect(wormholeWhirGain);o2.connect(g2);g2.connect(wormholeWhirGain);[o1,o2,lfo].forEach(o=>o.start());wormholeWhir={_oscs:[o1,o2,lfo],stop(){this._oscs.forEach(o=>{try{o.stop();}catch(e){}});}};}catch(e){}}
+function stopWormholeWhir(){try{if(wormholeWhirGain)wormholeWhirGain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.8);setTimeout(()=>{if(wormholeWhir){try{wormholeWhir.stop();}catch(e){}wormholeWhir=null;}},1000);}catch(e){}}
+function playWormholeEnter(){try{const ac=getAudio();const osc=ac.createOscillator();osc.type='sawtooth';osc.frequency.setValueAtTime(200,ac.currentTime);osc.frequency.exponentialRampToValueAtTime(2000,ac.currentTime+0.4);const g=ac.createGain();g.gain.setValueAtTime(0.5,ac.currentTime);g.gain.linearRampToValueAtTime(0,ac.currentTime+0.45);const lpf=ac.createBiquadFilter();lpf.type='lowpass';lpf.frequency.value=3000;osc.connect(lpf);lpf.connect(g);g.connect(ac.destination);osc.start();osc.stop(ac.currentTime+0.5);}catch(e){}}
+function playWormholeExit(){try{const ac=getAudio();const osc=ac.createOscillator();osc.type='sine';osc.frequency.setValueAtTime(1200,ac.currentTime);osc.frequency.exponentialRampToValueAtTime(150,ac.currentTime+0.5);const g=ac.createGain();g.gain.setValueAtTime(0.35,ac.currentTime);g.gain.linearRampToValueAtTime(0,ac.currentTime+0.55);osc.connect(g);g.connect(ac.destination);osc.start();osc.stop(ac.currentTime+0.6);}catch(e){}}
 
-    // Store refs so we can pitch-shift with speed and stop cleanly
-    droneNode = {
-      _nodes:[o1,o2,sub,lfo,wave,lpf,g1,g2,subG,lfoG],
-      _o1:o1, _o2:o2, _sub:sub, _lfo:lfo,
-      stop() { [o1,o2,sub,lfo].forEach(o=>{try{o.stop();}catch(e){}}); }
-    };
-  } catch(e){}
-}
+let lastElapsed = 0;
+function shareScore(){const mins=Math.floor(lastElapsed/60);const secs=Math.floor(lastElapsed%60);const timeStr=mins>0?`${mins}m ${secs}s`:`${secs}s`;const txt=`I survived ${timeStr} in VOID RUNNER and scored ${Math.floor(best)}! Can you beat me? Play at vcac-app.vercel.app 🎮`;if(navigator.clipboard){navigator.clipboard.writeText(txt).then(()=>{const btn=document.getElementById('share-btn');if(btn){btn.textContent='Copied!';setTimeout(()=>{btn.textContent='Share Score';},2000);}}).catch(()=>{alert(txt);});}else{alert(txt);}}
 
-// Call each frame during play to pitch engine with speed multiplier
-function updateDronePitch() {
-  try {
-    if (!droneNode) return;
-    // Base 90/135/45Hz, ramp up to ~160/240/80Hz at max speed mult 5x
-    const t = Math.min((mult - 1) / 4, 1); // 0→1 over speed range
-    droneNode._o1.frequency.value  = 90  + t * 70;
-    droneNode._o2.frequency.value  = 135 + t * 105;
-    droneNode._sub.frequency.value = 45  + t * 35;
-    // LFO pulses faster when tense
-    droneNode._lfo.frequency.value = 2.0 + t * 4.0;
-  } catch(e){}
-}
-function stopDrone() {
-  try {
-    if (droneGain) { droneGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime+0.3); }
-    setTimeout(() => { if (droneNode) { try{droneNode.stop();}catch(e){} droneNode=null; } }, 400);
-  } catch(e){}
-}
-function playWhoosh() {
-  // Close-call whoosh: high-speed air tear (kept as-is, called on close call)
-  try {
-    const ac = getAudio();
-    const dur = 0.25;
-    const buf = ac.createBuffer(1, ac.sampleRate*dur, ac.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.6;
-    const src = ac.createBufferSource(); src.buffer=buf;
-    const bpf = ac.createBiquadFilter(); bpf.type='bandpass'; bpf.frequency.value=900; bpf.Q.value=0.4;
-    const g = ac.createGain();
-    // Envelope: silent→loud→silent (doppler swoosh shape)
-    g.gain.setValueAtTime(0, ac.currentTime);
-    g.gain.linearRampToValueAtTime(0.5, ac.currentTime+0.06);
-    g.gain.linearRampToValueAtTime(0, ac.currentTime+dur);
-    src.connect(bpf); bpf.connect(g); g.connect(ac.destination); src.start();
-  } catch(e){}
-}
-
-function playObstacleApproach() {
-  // "Whooom" — low train-like rumble, builds from quiet to loud over 0.8s
-  try {
-    const ac = getAudio();
-    const dur = 0.9;
-    // Low tone that sweeps down in pitch (doppler approaching feel)
-    const osc = ac.createOscillator(); osc.type='sawtooth';
-    osc.frequency.setValueAtTime(140, ac.currentTime);
-    osc.frequency.linearRampToValueAtTime(70, ac.currentTime+dur);
-    const lpf = ac.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=200;
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0, ac.currentTime);
-    g.gain.linearRampToValueAtTime(0.28, ac.currentTime+0.6);
-    g.gain.linearRampToValueAtTime(0, ac.currentTime+dur);
-    osc.connect(lpf); lpf.connect(g); g.connect(ac.destination);
-    osc.start(); osc.stop(ac.currentTime+dur);
-  } catch(e){}
-}
-function playExplosion() {
-  try {
-    const ac = getAudio();
-    const buf = ac.createBuffer(1, ac.sampleRate*0.5, ac.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.5);
-    const src = ac.createBufferSource(); src.buffer=buf;
-    const gain = ac.createGain(); gain.gain.setValueAtTime(0.6, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+0.5);
-    src.connect(gain); gain.connect(ac.destination); src.start();
-  } catch(e){}
-}
-function playLevelUp() {
-  try {
-    const ac = getAudio();
-    const notes = [440,554,659,880];
-    notes.forEach((freq,i) => {
-      const osc = ac.createOscillator(); osc.type='sine'; osc.frequency.value=freq;
-      const g = ac.createGain();
-      const t = ac.currentTime + i*0.12;
-      g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.15,t+0.04);
-      g.gain.linearRampToValueAtTime(0,t+0.18);
-      osc.connect(g); g.connect(ac.destination);
-      osc.start(t); osc.stop(t+0.2);
-    });
-  } catch(e){}
-}
-
-// ── Wormhole audio ───────────────────────────────────────
-function startWormholeWhir() {
-  try {
-    const ac = getAudio();
-    wormholeWhirGain = ac.createGain();
-    wormholeWhirGain.gain.setValueAtTime(0, ac.currentTime);
-    wormholeWhirGain.gain.linearRampToValueAtTime(0.22, ac.currentTime+0.5);
-    wormholeWhirGain.connect(ac.destination);
-    // Two oscillators: fast high-pitched whir + harmonic
-    const o1 = ac.createOscillator(); o1.type='sine'; o1.frequency.value=880;
-    const o2 = ac.createOscillator(); o2.type='sine'; o2.frequency.value=1320;
-    // LFO makes it wobble — electronic whirring feel
-    const lfo = ac.createOscillator(); lfo.frequency.value=8;
-    const lfoG = ac.createGain(); lfoG.gain.value=120;
-    lfo.connect(lfoG); lfoG.connect(o1.frequency); lfoG.connect(o2.frequency);
-    const g1 = ac.createGain(); g1.gain.value=0.6;
-    const g2 = ac.createGain(); g2.gain.value=0.4;
-    o1.connect(g1); g1.connect(wormholeWhirGain);
-    o2.connect(g2); g2.connect(wormholeWhirGain);
-    [o1,o2,lfo].forEach(o=>o.start());
-    wormholeWhir = { _oscs:[o1,o2,lfo], stop(){this._oscs.forEach(o=>{try{o.stop();}catch(e){}});} };
-  } catch(e){}
-}
-function stopWormholeWhir() {
-  try {
-    if (wormholeWhirGain) wormholeWhirGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime+0.8);
-    setTimeout(()=>{ if(wormholeWhir){try{wormholeWhir.stop();}catch(e){}wormholeWhir=null;} },1000);
-  } catch(e){}
-}
-function playWormholeEnter() {
-  try {
-    const ac = getAudio();
-    // Dramatic rising sweep
-    const osc = ac.createOscillator(); osc.type='sawtooth';
-    osc.frequency.setValueAtTime(200, ac.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(2000, ac.currentTime+0.4);
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.5, ac.currentTime);
-    g.gain.linearRampToValueAtTime(0, ac.currentTime+0.45);
-    const lpf = ac.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=3000;
-    osc.connect(lpf); lpf.connect(g); g.connect(ac.destination);
-    osc.start(); osc.stop(ac.currentTime+0.5);
-  } catch(e){}
-}
-function playWormholeExit() {
-  try {
-    const ac = getAudio();
-    const osc = ac.createOscillator(); osc.type='sine';
-    osc.frequency.setValueAtTime(1200, ac.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(150, ac.currentTime+0.5);
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.35, ac.currentTime);
-    g.gain.linearRampToValueAtTime(0, ac.currentTime+0.55);
-    osc.connect(g); g.connect(ac.destination);
-    osc.start(); osc.stop(ac.currentTime+0.6);
-  } catch(e){}
-}
-
-// ── Share score ───────────────────────────────────────────
-let lastElapsed = 0; // updated each frame during play
-function shareScore() {
-  const mins = Math.floor(lastElapsed/60);
-  const secs = Math.floor(lastElapsed%60);
-  const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-  const txt = `I survived ${timeStr} in VOID RUNNER and scored ${Math.floor(best)}! Can you beat me? Play at vcac-app.vercel.app 🎮`;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(txt).then(() => {
-      const btn = document.getElementById('share-btn');
-      if (btn) { btn.textContent='✓ Copied!'; setTimeout(()=>{ btn.textContent='📋 Share Score'; },2000); }
-    }).catch(()=>{ alert(txt); });
-  } else { alert(txt); }
-}
-
-// Drifting stars — init once
-const NSTARS = 100;
-let dstars = [];
-function initStars() {
-  dstars = [];
-  for (let i = 0; i < NSTARS; i++)
-    dstars.push({ x: Math.random()*W, y: Math.random()*H, r: .5+Math.random()*1.8, spd: .4+Math.random()*1.4, a: .2+Math.random()*.7 });
-}
+const NSTARS=100;let dstars=[];
+function initStars(){dstars=[];for(let i=0;i<NSTARS;i++)dstars.push({x:Math.random()*W,y:Math.random()*H,r:.5+Math.random()*1.8,spd:.4+Math.random()*1.4,a:.2+Math.random()*.7});}
 initStars();
-
-// Speed lines
-let slines = [];
-function initLines() {
-  slines = [];
-  for (let i = 0; i < 20; i++) slines.push(mkLine());
-}
-function mkLine() {
-  return { x: Math.random()*W, y: Math.random()*H, len: 80+Math.random()*200, spd: 10+Math.random()*16, a: .06+Math.random()*.18, w: .5+Math.random()*1.2 };
-}
+let slines=[];
+function initLines(){slines=[];for(let i=0;i<20;i++)slines.push({x:Math.random()*W,y:Math.random()*H,len:80+Math.random()*200,spd:10+Math.random()*16,a:.06+Math.random()*.18,w:.5+Math.random()*1.2});}
 initLines();
 
-// Input
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space') {
     e.preventDefault();
-    if (state === S.START || state === S.OVER) startGame();
+    if (state===S.START) startGame();
+    else if (state===S.OVER) startGame();
+    else if (state===S.PLAY) togglePause();
+    else if (state===S.PAUSE) togglePause();
   }
-  if (e.code === 'ArrowUp' || e.code === 'ArrowDown') e.preventDefault();
+  if (e.code==='Escape'){e.preventDefault();if(document.getElementById('replay-overlay').classList.contains('visible'))closeReplay();}
+  if (e.code==='ArrowUp'||e.code==='ArrowDown') e.preventDefault();
 });
-window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('keyup', e => { keys[e.code]=false; });
 
-function show(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  if (id) document.getElementById(id).classList.add('active');
-  document.getElementById('hud').classList.toggle('on', id === null);
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  if(id)document.getElementById(id).classList.add('active');
+  document.getElementById('hud').classList.toggle('on',id===null);
 }
 
-function startGame() {
-  const now = performance.now();
-  score = 0;
-  startTime = now;
-  lastSpeed = now;
-  lastMultUp = now;
-  baseSpd = W * 0.004;
-  curSpd = baseSpd;
-  mult = 1.0;
-  scoreMult = 1.0;
-  level = 1; lastLevelScore = 0; bgHueIdx = 0;
-  levelUpAnim = 0; newRecordAnim = 0;
-  obsInterval = 90;
-  obsTimer = 0;
-  shakeAmt = 0;
-  player = { x: W*.08, y: H/2, w:30, h:30, vy:0, spd: H*.012 };
-  obs = []; parts = []; trail = []; floatTexts = [];
-  wormhole = null;
-  wormholeMode = false;
-  wormholeNextSpawn = performance.now() + 20000 + Math.random()*10000;
-  wormholeEnd = 0; wormholeEnterTime = 0; wormholeBonusAdded = false;
-  wormholeExitAnim = 0; screenFlash = 0;
-  if (wormholeWhir) { try{wormholeWhir.stop();}catch(e){} wormholeWhir=null; }
-  show(null);
-  state = S.PLAY;
-  startDrone();
+function startGame(){
+  const now=performance.now();
+  score=0;startTime=now;lastSpeed=now;lastMultUp=now;
+  baseSpd=W*0.004;curSpd=baseSpd;mult=1.0;scoreMult=1.0;
+  level=1;lastLevelScore=0;bgHueIdx=0;levelUpAnim=0;newRecordAnim=0;
+  obsInterval=90;obsTimer=0;shakeAmt=0;
+  player={x:W*.08,y:H/2,w:30,h:30,vy:0,spd:H*.012};
+  obs=[];parts=[];trail=[];floatTexts=[];obsIdCounter=0;
+  replayFrames=[];lastReplayCap=0;
+  if(replayRAF){cancelAnimationFrame(replayRAF);replayRAF=null;}
+  wormhole=null;wormholeMode=false;
+  wormholeNextSpawn=performance.now()+20000+Math.random()*10000;
+  wormholeEnd=0;wormholeEnterTime=0;wormholeBonusAdded=false;
+  wormholeExitAnim=0;screenFlash=0;
+  if(wormholeWhir){try{wormholeWhir.stop();}catch(e){}wormholeWhir=null;}
+  show(null);state=S.PLAY;startDrone();
 }
 
-// Obstacle types: 'normal' | 'moving' | 'fast' | 'gap'
-let warnFlash = 0; // timestamp until which WARNING is shown
+let warnFlash=0;
+function spawnObs(){const r=Math.random();if(r<0.15)spawnFast();else if(r<0.35)spawnMoving();else if(r<0.55)spawnGap();else spawnNormal();playObstacleApproach();}
+function spawnNormal(){const oh=40+Math.random()*80;const gap=H*.35+Math.random()*(H*.15);const ty=Math.random()*(H-oh-gap-40)+20;obs.push({x:W+20,y:ty,w:20,h:oh,type:'normal',hue:10+Math.random()*30,id:obsIdCounter++});obs.push({x:W+20,y:ty+oh+gap,w:20,h:H-(ty+oh+gap),type:'normal',hue:10+Math.random()*30,id:obsIdCounter++});}
+function spawnMoving(){const oh=50+Math.random()*60;const gap=H*.38+Math.random()*(H*.12);const ty=Math.random()*(H-oh-gap-40)+20;const phase=Math.random()*Math.PI*2;const amp=30+Math.random()*50;const freq=.0008+Math.random()*.0006;obs.push({x:W+20,y:ty,baseY:ty,w:20,h:oh,type:'moving',hue:200+Math.random()*40,phase,amp,freq,id:obsIdCounter++});obs.push({x:W+20,y:ty+oh+gap,baseY:ty+oh+gap,w:20,h:H-(ty+oh+gap),type:'moving',hue:200+Math.random()*40,phase,amp,freq,id:obsIdCounter++});}
+function spawnFast(){warnFlash=performance.now()+500;const oh=40+Math.random()*80;const gap=H*.35+Math.random()*(H*.15);const ty=Math.random()*(H-oh-gap-40)+20;obs.push({x:W+20,y:ty,w:10,h:oh,type:'fast',speedMult:2,id:obsIdCounter++});obs.push({x:W+20,y:ty+oh+gap,w:10,h:H-(ty+oh+gap),type:'fast',speedMult:2,id:obsIdCounter++});}
+function spawnGap(){const GAP=80;const topH=30+Math.random()*80;const midH=30+Math.random()*80;const gap1Y=topH+GAP;const gap2Y=gap1Y+midH+GAP;if(gap2Y+30>H){spawnNormal();return;}const botH=H-gap2Y;obs.push({x:W+20,y:0,w:20,h:topH,type:'gap',id:obsIdCounter++});obs.push({x:W+20,y:gap1Y,w:20,h:midH,type:'gap',id:obsIdCounter++});obs.push({x:W+20,y:gap2Y,w:20,h:botH,type:'gap',id:obsIdCounter++});}
+function spawnWormhole(){if(wormhole||wormholeMode)return;wormhole={x:W+70,y:H*0.15+Math.random()*H*0.7,r:30,spd:(baseSpd*mult)*0.85,rot:0,type:'wormhole'};}
+function emitParticles(px,py){const n=25+Math.floor(Math.random()*6);for(let i=0;i<n;i++){const angle=(Math.PI*2/n)*i+Math.random()*.4;const spd=2.5+Math.random()*7;const colors=['#00ffff','#aaffff','#0099ff'];parts.push({x:px+15,y:py+15,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd-1.5,life:1,decay:.028+Math.random()*.025,size:2.5+Math.random()*4.5,color:colors[Math.floor(Math.random()*colors.length)],sq:Math.random()<.4});}}
+function collide(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
 
-function spawnObs() {
-  const roll = Math.random();
-  if (roll < 0.15) {
-    spawnFast();
-  } else if (roll < 0.35) {
-    spawnMoving();
-  } else if (roll < 0.55) {
-    spawnGap();
-  } else {
-    spawnNormal();
-  }
-  playObstacleApproach();
-}
-
-function spawnNormal() {
-  const oh = 40 + Math.random()*80;
-  const gap = H*.35 + Math.random()*(H*.15);
-  const ty = Math.random()*(H - oh - gap - 40) + 20;
-  obs.push({ x:W+20, y:ty,        w:20, h:oh,              type:'normal', hue:10+Math.random()*30 });
-  obs.push({ x:W+20, y:ty+oh+gap, w:20, h:H-(ty+oh+gap),   type:'normal', hue:10+Math.random()*30 });
-}
-
-function spawnMoving() {
-  const oh = 50 + Math.random()*60;
-  const gap = H*.38 + Math.random()*(H*.12);
-  const ty = Math.random()*(H - oh - gap - 40) + 20;
-  const phase = Math.random()*Math.PI*2;
-  const amp = 30 + Math.random()*50;
-  const freq = .0008 + Math.random()*.0006;
-  obs.push({ x:W+20, y:ty,        baseY:ty,        w:20, h:oh,            type:'moving', hue:200+Math.random()*40, phase, amp, freq });
-  obs.push({ x:W+20, y:ty+oh+gap, baseY:ty+oh+gap, w:20, h:H-(ty+oh+gap), type:'moving', hue:200+Math.random()*40, phase, amp, freq });
-}
-
-function spawnFast() {
-  // queue warning 500ms before it arrives
-  warnFlash = performance.now() + 500;
-  const oh = 40 + Math.random()*80;
-  const gap = H*.35 + Math.random()*(H*.15);
-  const ty = Math.random()*(H - oh - gap - 40) + 20;
-  obs.push({ x:W+20, y:ty,        w:10, h:oh,            type:'fast', speedMult:2 });
-  obs.push({ x:W+20, y:ty+oh+gap, w:10, h:H-(ty+oh+gap), type:'fast', speedMult:2 });
-}
-
-function spawnGap() {
-  // Three-piece column with two gaps — top chunk, middle chunk, bottom chunk
-  // Gap size exactly 80px each
-  const GAP = 80;
-  const topH  = 30 + Math.random()*80;
-  const midH  = 30 + Math.random()*80;
-  const gap1Y = topH + GAP;
-  const gap2Y = gap1Y + midH + GAP;
-  // Only spawn if it all fits
-  if (gap2Y + 30 > H) { spawnNormal(); return; }
-  const botH = H - gap2Y;
-  obs.push({ x:W+20, y:0,     w:20, h:topH,  type:'gap' });
-  obs.push({ x:W+20, y:gap1Y, w:20, h:midH,  type:'gap' });
-  obs.push({ x:W+20, y:gap2Y, w:20, h:botH,  type:'gap' });
-}
-
-function spawnWormhole() {
-  if (wormhole || wormholeMode) return;
-  wormhole = {
-    x: W + 70,
-    y: H * 0.15 + Math.random() * H * 0.7,
-    r: 30,           // radius 30 = 60px diameter
-    spd: (baseSpd * mult) * 0.85,
-    rot: 0,
-    type: 'wormhole'
-  };
-}
-
-function emitParticles(px, py) {
-  const n = 25 + Math.floor(Math.random()*6);
-  for (let i = 0; i < n; i++) {
-    const angle = (Math.PI*2/n)*i + Math.random()*.4;
-    const spd = 2.5 + Math.random()*7;
-    const colors = ['#00ffff','#aaffff','#0099ff'];
-    parts.push({
-      x: px+15, y: py+15,
-      vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd - 1.5,
-      life:1, decay:.028+Math.random()*.025,
-      size:2.5+Math.random()*4.5,
-      color: colors[Math.floor(Math.random()*colors.length)],
-      sq: Math.random()<.4
-    });
-  }
-}
-
-function collide(a, b) {
-  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
-}
-
-function update(now) {
-  const elapsed = (now - startTime) / 1000;
-
-  // Speed multiplier every 10s
-  if (now - lastSpeed > 10000) {
-    mult += 0.18;
-    curSpd = baseSpd * mult;
-    obsInterval = Math.max(45, obsInterval - 5);
-    lastSpeed = now;
-  }
+function update(now){
+  const elapsed=(now-startTime)/1000;
+  if(now-lastSpeed>10000){mult+=0.18;curSpd=baseSpd*mult;obsInterval=Math.max(45,obsInterval-5);lastSpeed=now;}
   updateDronePitch();
-
-  // Score multiplier every 15s
-  if (now - lastMultUp > 15000) {
-    scoreMult += 0.5;
-    lastMultUp = now;
+  if(now-lastMultUp>15000){scoreMult+=0.5;lastMultUp=now;}
+  score+=0.5*scoreMult;
+  const newLevel=1+Math.floor(score/500);
+  if(newLevel>level){level=newLevel;bgHueIdx=(level-1)%BG_HUES.length;levelUpAnim=now;playLevelUp();}
+  if(keys['ArrowUp']||keys['KeyW'])player.vy=-player.spd;
+  else if(keys['ArrowDown']||keys['KeyS'])player.vy=player.spd;
+  else player.vy*=0.7;
+  player.y=Math.max(0,Math.min(H-player.h,player.y+player.vy));
+  trail.unshift({x:player.x,y:player.y});if(trail.length>5)trail.length=5;
+  if(++obsTimer>=obsInterval){spawnObs();obsTimer=0;}
+  if(!wormhole&&!wormholeMode&&now>=wormholeNextSpawn)spawnWormhole();
+  if(wormhole){
+    wormhole.x-=wormhole.spd;wormhole.rot+=0.03;
+    const dx=(player.x+15)-wormhole.x,dy=(player.y+15)-wormhole.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<wormhole.r+12){wormholeMode=true;wormholeEnterTime=now;wormholeEnd=now+8000;wormholePreMult=scoreMult;wormholePreSpd=mult;wormholePreCurSpd=curSpd;wormholeBonusAdded=false;scoreMult=5.0;mult*=2;curSpd=baseSpd*mult;wormhole=null;screenFlash=1.0;playWormholeEnter();startWormholeWhir();}
+    else if(wormhole.x+wormhole.r<-10){wormhole=null;wormholeNextSpawn=now+20000+Math.random()*10000;}
   }
-
-  score += 0.5 * scoreMult;
-
-  // Level up every 500 points
-  const newLevel = 1 + Math.floor(score / 500);
-  if (newLevel > level) {
-    level = newLevel;
-    bgHueIdx = (level - 1) % BG_HUES.length;
-    levelUpAnim = now;
-    playLevelUp();
-  }
-
-  if (keys['ArrowUp'] || keys['KeyW']) player.vy = -player.spd;
-  else if (keys['ArrowDown'] || keys['KeyS']) player.vy = player.spd;
-  else player.vy *= 0.7;
-
-  player.y = Math.max(0, Math.min(H - player.h, player.y + player.vy));
-
-  trail.unshift({ x:player.x, y:player.y });
-  if (trail.length > 5) trail.length = 5;
-
-  if (++obsTimer >= obsInterval) { spawnObs(); obsTimer = 0; }
-
-  // Wormhole spawn
-  if (!wormhole && !wormholeMode && now >= wormholeNextSpawn) spawnWormhole();
-
-  // Wormhole portal movement + collision
-  if (wormhole) {
-    wormhole.x -= wormhole.spd;
-    wormhole.rot += 0.03;
-    const dx = (player.x+15) - wormhole.x;
-    const dy = (player.y+15) - wormhole.y;
-    const dist = Math.sqrt(dx*dx+dy*dy);
-    if (dist < wormhole.r + 12) {
-      // ENTER WORMHOLE
-      wormholeMode = true;
-      wormholeEnterTime = now;
-      wormholeEnd = now + 8000;
-      wormholePreMult = scoreMult;
-      wormholePreSpd = mult;
-      wormholePreCurSpd = curSpd;
-      wormholeBonusAdded = false;
-      scoreMult = 5.0;
-      mult *= 2;
-      curSpd = baseSpd * mult;
-      wormhole = null;
-      screenFlash = 1.0;
-      playWormholeEnter();
-      startWormholeWhir();
-    } else if (wormhole.x + wormhole.r < -10) {
-      wormhole = null;
-      wormholeNextSpawn = now + 20000 + Math.random()*10000;
+  if(wormholeMode&&now>=wormholeEnd){wormholeMode=false;wormholeExitAnim=now;screenFlash=0.8;const survived=(now-wormholeEnterTime)/1000;const bonus=Math.floor(500*survived);score+=bonus;floatTexts.push({x:W/2,y:H/2,text:'WORMHOLE COMPLETE! +'+bonus,life:1,color:'#ff6bff',big:true});scoreMult=wormholePreMult;mult=wormholePreSpd;curSpd=wormholePreCurSpd;wormholeNextSpawn=now+20000+Math.random()*10000;stopWormholeWhir();playWormholeExit();}
+  if(screenFlash>0)screenFlash=Math.max(0,screenFlash-0.04);
+  const hb={x:player.x+3,y:player.y+3,w:player.w-6,h:player.h-6};
+  for(let i=obs.length-1;i>=0;i--){
+    const o=obs[i];const spd=o.type==='fast'?curSpd*o.speedMult:curSpd;
+    o.x-=spd;if(o.type==='moving')o.y=o.baseY+Math.sin(now*o.freq+o.phase)*o.amp;
+    if(o.x+o.w<-10){obs.splice(i,1);continue;}
+    if(collide(hb,o)){
+      emitParticles(player.x,player.y);shakeAmt=8;shakeTil=now+300;
+      const isNewBest=score>best;
+      if(isNewBest){best=score;localStorage.setItem('voidrunner_best',Math.floor(best));updateMenuBest();}
+      document.getElementById('fs').textContent=Math.floor(score);
+      document.getElementById('hsv').textContent=Math.floor(best);
+      document.getElementById('hsl').textContent=isNewBest?(wormholeMode?'NEW RECORD (WORMHOLE BOOST)':'NEW RECORD'):'Best Run';
+      playExplosion();stopDrone();stopWormholeWhir();
+      replayRunScore=Math.floor(score);replayRunTime=Math.floor(elapsed);
+      show('s-over');state=S.OVER;return;
     }
-  }
-
-  // Wormhole mode tick
-  if (wormholeMode) {
-    if (now >= wormholeEnd) {
-      // EXIT wormhole
-      wormholeMode = false;
-      wormholeExitAnim = now;
-      screenFlash = 0.8;
-      const survived = (now - wormholeEnterTime) / 1000;
-      const bonus = Math.floor(500 * survived);
-      score += bonus;
-      floatTexts.push({ x:W/2, y:H/2, text:'WORMHOLE COMPLETE! +'+bonus, life:1, color:'#ff6bff', big:true });
-      scoreMult = wormholePreMult;
-      mult = wormholePreSpd;
-      curSpd = wormholePreCurSpd;
-      wormholeNextSpawn = now + 20000 + Math.random()*10000;
-      stopWormholeWhir();
-      playWormholeExit();
-    }
-  }
-
-  // Decay screen flash
-  if (screenFlash > 0) screenFlash = Math.max(0, screenFlash - 0.04);
-
-  const hb = { x:player.x+3, y:player.y+3, w:player.w-6, h:player.h-6 };
-
-  for (let i = obs.length-1; i >= 0; i--) {
-    const o = obs[i];
-    const spd = o.type==='fast' ? curSpd * o.speedMult : curSpd;
-    o.x -= spd;
-    if (o.type==='moving') o.y = o.baseY + Math.sin(now * o.freq + o.phase) * o.amp;
-
-    if (o.x + o.w < -10) { obs.splice(i,1); continue; }
-
-    if (collide(hb, o)) {
-      emitParticles(player.x, player.y);
-      shakeAmt = 8; shakeTil = now + 300;
-      const isNewBest = score > best;
-      if (isNewBest) { best = score; localStorage.setItem('voidrunner_best', Math.floor(best)); updateMenuBest(); }
-      document.getElementById('fs').textContent = Math.floor(score);
-      document.getElementById('hsv').textContent = Math.floor(best);
-      document.getElementById('hsl').textContent = isNewBest ? (wormholeMode ? '★ NEW RECORD (WORMHOLE BOOST) ★' : '★ NEW RECORD ★') : 'Best Run';
-      playExplosion(); stopDrone(); stopWormholeWhir();
-      show('s-over');
-      state = S.OVER;
-      return;
-    }
-
-    // Close call bonus: obstacle just passed the player (right edge crosses player left edge)
-    // Check within 10px gap, not colliding
-    if (!o._closeCalled) {
-      const nearX = o.x + o.w >= player.x - 10 && o.x + o.w <= player.x + player.w + 10;
-      const nearY = o.y < hb.y + hb.h + 10 && o.y + o.h > hb.y - 10;
-      const notHit = !collide(hb, o);
-      // Trigger when obstacle has just passed the player's x
-      if (nearX && nearY && notHit && o.x + o.w < player.x + 5 && o.x + o.w > player.x - 15) {
-        o._closeCalled = true;
-        score += 50 * scoreMult;
-        floatTexts.push({
-          x: player.x + player.w/2,
-          y: player.y,
-          text: '+' + Math.floor(50 * scoreMult) + ' CLOSE CALL!',
-          life: 1, color: '#ffff00'
-        });
+    if(!o._closeCalled){
+      const nearX=o.x+o.w>=player.x-10&&o.x+o.w<=player.x+player.w+10;
+      const nearY=o.y<hb.y+hb.h+10&&o.y+o.h>hb.y-10;
+      if(nearX&&nearY&&!collide(hb,o)&&o.x+o.w<player.x+5&&o.x+o.w>player.x-15){
+        o._closeCalled=true;score+=50*scoreMult;
+        floatTexts.push({x:player.x+player.w/2,y:player.y,text:'+'+Math.floor(50*scoreMult)+' CLOSE CALL!',life:1,color:'#ffff00'});
         playWhoosh();
       }
     }
   }
-
-  for (let i = parts.length-1; i >= 0; i--) {
-    const p = parts[i];
-    p.x += p.vx; p.y += p.vy; p.vy += .12; p.life -= p.decay;
-    if (p.life <= 0) parts.splice(i,1);
+  for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=p.decay;if(p.life<=0)parts.splice(i,1);}
+  for(let i=floatTexts.length-1;i>=0;i--){const f=floatTexts[i];f.y-=f.big?.5:1.2;f.life-=f.big?.008:.018;if(f.life<=0)floatTexts.splice(i,1);}
+  // Replay capture
+  if(replayFrames.length<REPLAY_MAX_FRAMES&&now-lastReplayCap>=REPLAY_INTERVAL){
+    lastReplayCap=lastReplayCap===0?now:lastReplayCap+REPLAY_INTERVAL;
+    replayFrames.push({py:player.y,ob:obs.map(o=>({id:o.id,x:Math.round(o.x),y:Math.round(o.y),w:o.w,h:Math.round(o.h),t:o.type,h2:o.hue||0})),wm:wormholeMode?1:0,bg:bgHueIdx,sm:scoreMult,sp:mult,sc:Math.floor(score),wh:wormhole?{x:Math.round(wormhole.x),y:Math.round(wormhole.y),r:wormhole.r,rot:wormhole.rot}:null});
   }
-
-  for (let i = floatTexts.length-1; i >= 0; i--) {
-    const f = floatTexts[i];
-    f.y -= f.big ? 0.5 : 1.2;
-    f.life -= f.big ? 0.008 : 0.018;
-    if (f.life <= 0) floatTexts.splice(i,1);
-  }
-
-  // HUD updates
-  lastElapsed = elapsed;
-  const pct = Math.min(100, (mult-1)/4*100);
-  document.getElementById('sb').style.width = (10 + pct*.9)+'%';
-  document.getElementById('hs').textContent = Math.floor(score);
-  document.getElementById('hb').textContent = Math.floor(best);
-  document.getElementById('hsp').textContent = 'SPD ' + mult.toFixed(1)+'x';
-  document.getElementById('htm').textContent = Math.floor(elapsed)+'s';
-  document.getElementById('hlvl').textContent = level;
-
-  // Multiplier glow — gold and blazing in wormhole mode
-  const mEl = document.getElementById('hmult');
-  mEl.textContent = scoreMult.toFixed(1)+'x';
-  const mGlow = wormholeMode ? 60 : Math.min(scoreMult * 8, 40);
-  const mHue = wormholeMode ? 45 : (scoreMult > 3 ? 30 : scoreMult > 2 ? 60 : 180);
-  mEl.style.color = wormholeMode ? '#ffd700' : `hsl(${mHue},100%,65%)`;
-  mEl.style.textShadow = wormholeMode
-    ? `0 0 20px #ffd700, 0 0 40px #ff8800, 0 0 80px #ff4400`
-    : `0 0 ${mGlow}px hsl(${mHue},100%,65%), 0 0 ${mGlow*2}px hsl(${mHue},100%,40%)`;
+  lastElapsed=elapsed;
+  const pct=Math.min(100,(mult-1)/4*100);
+  document.getElementById('sb').style.width=(10+pct*.9)+'%';
+  document.getElementById('hs').textContent=Math.floor(score);
+  document.getElementById('hb').textContent=Math.floor(best);
+  document.getElementById('hsp').textContent='SPD '+mult.toFixed(1)+'x';
+  document.getElementById('htm').textContent=Math.floor(elapsed)+'s';
+  document.getElementById('hlvl').textContent=level;
+  const mEl=document.getElementById('hmult');mEl.textContent=scoreMult.toFixed(1)+'x';
+  const mGlow=wormholeMode?60:Math.min(scoreMult*8,40);const mHue=wormholeMode?45:(scoreMult>3?30:scoreMult>2?60:180);
+  mEl.style.color=wormholeMode?'#ffd700':`hsl(${mHue},100%,65%)`;
+  mEl.style.textShadow=wormholeMode?'0 0 20px #ffd700,0 0 40px #ff8800,0 0 80px #ff4400':`0 0 ${mGlow}px hsl(${mHue},100%,65%),0 0 ${mGlow*2}px hsl(${mHue},100%,40%)`;
 }
 
-function draw(now) {
-  const elapsed = state === S.PLAY ? (now - startTime)/1000 : 0;
-
-  // Shake
-  let sx=0, sy=0;
-  if (shakeAmt > 0 && now < shakeTil) {
-    const t = 1-(now-shakeTil+300)/300;
-    sx = (Math.random()*2-1)*shakeAmt*t;
-    sy = (Math.random()*2-1)*shakeAmt*t;
-  }
-
-  ctx.save();
-  ctx.translate(sx, sy);
-
-  // Background
-  if (wormholeMode) {
-    // Deep blue base
-    ctx.fillStyle = '#0a0a2e';
-    ctx.fillRect(0,0,W,H);
-    // Doraemon-style time tunnel: concentric rotating rings expanding outward
-    const cx=W/2, cy=H/2;
-    const tunnelT = (now - wormholeEnterTime)/1000;
-    const numRings = 18;
-    const tunnelColors = ['#9b59ff','#00e5ff','#ff6b9d','#0a0a2e','#cc00ff','#00ffff','#ff44aa'];
-    for (let r=0; r<numRings; r++) {
-      // Each ring expands outward and wraps — creates flying-through illusion
-      const phase = (r/numRings + tunnelT*0.6) % 1;
-      const radius = phase * Math.max(W,H) * 0.85;
-      const alpha = (1-phase) * 0.55;
-      const col = tunnelColors[r % tunnelColors.length];
-      // Slight rotation per ring — alternating CW/CCW
-      const rot = tunnelT * (r%2===0 ? 0.5 : -0.3) + r*0.35;
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(rot);
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 3 + (1-phase)*6;
-      ctx.shadowColor = col;
-      ctx.shadowBlur = 18;
-      // Draw ellipse for perspective tunnel feel
-      ctx.beginPath();
-      ctx.ellipse(0, 0, radius, radius*0.55, 0, 0, Math.PI*2);
-      ctx.stroke();
-      ctx.restore();
-    }
-    // Floating clock/spiral symbols drifting past
-    for (let i=0; i<8; i++) {
-      const sym = ['⏰','⌛','✦','⟳','◈','⊕','∞','✧'][i];
-      const sx = ((W*0.1 + i*(W*0.13) + tunnelT*80*(i%2===0?1:-1)) % (W*1.2)) - W*0.1;
-      const sy = H*0.1 + ((i*H*0.12 + tunnelT*40) % (H*0.85));
-      ctx.save();
-      ctx.globalAlpha = 0.18 + 0.1*Math.sin(tunnelT+i);
-      ctx.font = `${18+i*4}px serif`;
-      ctx.fillStyle = tunnelColors[i%tunnelColors.length];
-      ctx.textAlign='center';
-      ctx.fillText(sym, sx, sy);
-      ctx.restore();
-    }
-    // Radial light beams from center
-    for (let b=0; b<12; b++) {
-      const angle = (b/12)*Math.PI*2 + tunnelT*0.4;
-      const beamLen = Math.max(W,H)*0.7;
-      ctx.save();
-      ctx.globalAlpha = 0.04 + 0.02*Math.sin(tunnelT*2+b);
-      const grad = ctx.createLinearGradient(cx,cy, cx+Math.cos(angle)*beamLen, cy+Math.sin(angle)*beamLen);
-      grad.addColorStop(0,'#cc88ff'); grad.addColorStop(1,'transparent');
-      ctx.strokeStyle=grad; ctx.lineWidth=12;
-      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(angle)*beamLen, cy+Math.sin(angle)*beamLen);
-      ctx.stroke();
-      ctx.restore();
-    }
+function draw(now){
+  const elapsed=state===S.PLAY?(now-startTime)/1000:0;
+  let sx=0,sy=0;
+  if(shakeAmt>0&&now<shakeTil){const t=1-(now-shakeTil+300)/300;sx=(Math.random()*2-1)*shakeAmt*t;sy=(Math.random()*2-1)*shakeAmt*t;}
+  ctx.save();ctx.translate(sx,sy);
+  if(wormholeMode){
+    ctx.fillStyle='#0a0a2e';ctx.fillRect(0,0,W,H);
+    const cx=W/2,cy=H/2,tunnelT=(now-wormholeEnterTime)/1000;
+    const tC=['#9b59ff','#00e5ff','#ff6b9d','#0a0a2e','#cc00ff','#00ffff','#ff44aa'];
+    for(let r=0;r<18;r++){const phase=(r/18+tunnelT*0.6)%1;const radius=phase*Math.max(W,H)*0.85;const col=tC[r%tC.length];const rot=tunnelT*(r%2===0?.5:-.3)+r*0.35;ctx.save();ctx.translate(cx,cy);ctx.rotate(rot);ctx.globalAlpha=(1-phase)*0.55;ctx.strokeStyle=col;ctx.lineWidth=3+(1-phase)*6;ctx.shadowColor=col;ctx.shadowBlur=18;ctx.beginPath();ctx.ellipse(0,0,radius,radius*0.55,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
+    for(let i=0;i<8;i++){const sym=['⏰','⌛','✦','⟳','◈','⊕','∞','✧'][i];const bsx=((W*0.1+i*(W*0.13)+tunnelT*80*(i%2===0?1:-1))%(W*1.2))-W*0.1;const bsy=H*0.1+((i*H*0.12+tunnelT*40)%(H*0.85));ctx.save();ctx.globalAlpha=0.18+0.1*Math.sin(tunnelT+i);ctx.font=`${18+i*4}px serif`;ctx.fillStyle=tC[i%tC.length];ctx.textAlign='center';ctx.fillText(sym,bsx,bsy);ctx.restore();}
+    for(let b=0;b<12;b++){const angle=(b/12)*Math.PI*2+tunnelT*0.4;const bL=Math.max(W,H)*0.7;ctx.save();ctx.globalAlpha=0.04+0.02*Math.sin(tunnelT*2+b);const grad=ctx.createLinearGradient(cx,cy,cx+Math.cos(angle)*bL,cy+Math.sin(angle)*bL);grad.addColorStop(0,'#cc88ff');grad.addColorStop(1,'transparent');ctx.strokeStyle=grad;ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(angle)*bL,cy+Math.sin(angle)*bL);ctx.stroke();ctx.restore();}
   } else {
-    const bgC = (state===S.PLAY) ? (BG_HUES[bgHueIdx]||BG_HUES[0]) : BG_HUES[0];
-    ctx.fillStyle = `rgb(${bgC[0]},${bgC[1]},${bgC[2]})`;
-    ctx.fillRect(0,0,W,H);
+    const bgC=(state===S.PLAY)?(BG_HUES[bgHueIdx]||BG_HUES[0]):BG_HUES[0];
+    ctx.fillStyle=`rgb(${bgC[0]},${bgC[1]},${bgC[2]})`;ctx.fillRect(0,0,W,H);
   }
-
-  // Menu decorative obstacles (start screen only)
-  if (state===S.START) {
-    for (const mo of menuObs) {
-      mo.x -= mo.spd;
-      if (mo.x + mo.w < 0) { mo.x=W+mo.w; mo.y=Math.random()*H; }
-      ctx.save();
-      ctx.globalAlpha = mo.a;
-      ctx.shadowColor=`hsl(${mo.hue},100%,55%)`; ctx.shadowBlur=12;
-      ctx.fillStyle=`hsl(${mo.hue},100%,50%)`;
-      ctx.fillRect(mo.x,mo.y,mo.w,mo.h);
-      ctx.restore();
-    }
-  }
-
-  // Drifting stars
-  for (const s of dstars) {
-    s.x -= s.spd * (state===S.PLAY ? mult*.5 : .3);
-    if (s.x < -4) { s.x = W+4; s.y = Math.random()*H; }
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(255,255,255,${s.a})`;
-    ctx.fill();
-  }
-
-  // Speed lines after 30s
-  if (state===S.PLAY && elapsed>30) {
-    const fade = Math.min(1,(elapsed-30)/10);
-    for (const sl of slines) {
-      sl.x -= sl.spd * mult;
-      if (sl.x + sl.len < 0) { sl.x=W+sl.len; sl.y=Math.random()*H; sl.len=80+Math.random()*200; sl.spd=10+Math.random()*16; }
-      ctx.save();
-      ctx.globalAlpha = sl.a*fade;
-      ctx.strokeStyle='#ffffff'; ctx.lineWidth=sl.w;
-      ctx.beginPath(); ctx.moveTo(sl.x,sl.y); ctx.lineTo(sl.x+sl.len,sl.y); ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  // Grid
-  ctx.strokeStyle='#00ffff08'; ctx.lineWidth=.5;
-  const gs=80, spd = state===S.PLAY ? curSpd : baseSpd||W*.004;
-  const off = (now * spd * .3) % gs;
-  for (let x=-off; x<W; x+=gs) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for (let y=0; y<H; y+=gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-
-  // Trail — rainbow in wormhole mode
-  if (trail.length > 1) {
-    for (let i=1; i<trail.length; i++) {
-      const t = trail[i];
-      const a = (1 - i/6) * .5;
-      const sh = i*1.5;
-      const trailColor = wormholeMode ? `hsl(${(now*0.5 + i*40)%360},100%,65%)` : '#00ffff';
-      ctx.save();
-      ctx.globalAlpha=a; ctx.shadowColor=trailColor; ctx.shadowBlur=10;
-      ctx.fillStyle=trailColor;
-      ctx.fillRect(t.x+sh*.5, t.y+sh*.5, player.w-sh, player.h-sh);
-      ctx.restore();
-    }
-  }
-
-  // WARNING flash
-  if (warnFlash > 0 && now < warnFlash) {
-    const t = (warnFlash - now) / 500; // 1→0
-    const blink = Math.sin(now * 0.025) > 0;
-    if (blink) {
-      ctx.save();
-      ctx.globalAlpha = t * 0.95;
-      ctx.font = 'bold ' + Math.round(W*.03+16) + 'px "Courier New"';
-      ctx.fillStyle = '#ff2200';
-      ctx.shadowColor = '#ff2200';
-      ctx.shadowBlur = 30;
-      ctx.textAlign = 'right';
-      ctx.fillText('⚠ WARNING', W - 30, H/2);
-      ctx.font = 'bold ' + Math.round(W*.015+10) + 'px "Courier New"';
-      ctx.fillStyle = '#ff6600';
-      ctx.shadowBlur = 15;
-      ctx.fillText('FAST OBSTACLE INCOMING', W - 30, H/2 + Math.round(W*.025+20));
-      ctx.restore();
-    }
-  }
-
-  // Draw wormhole portal
-  if (wormhole) {
-    const wh = wormhole;
-    const t = now * 0.001;
-    ctx.save();
-    ctx.translate(wh.x, wh.y);
-    // Outer ring — clockwise
-    for (let ring=4; ring>=0; ring--) {
-      const ringR = wh.r * (0.4 + ring*0.15);
-      const ringRot = wh.rot * (ring%2===0 ? 1 : -1.3) + ring*0.8;
-      const ringHue = [280,190,330,210,300][ring];
-      ctx.save();
-      ctx.rotate(ringRot);
-      ctx.strokeStyle=`hsl(${ringHue},100%,65%)`;
-      ctx.lineWidth = ring===0 ? 3 : 2;
-      ctx.shadowColor=`hsl(${ringHue},100%,60%)`;
-      ctx.shadowBlur = 18;
-      ctx.globalAlpha = 0.6 + 0.4*Math.sin(t*3+ring);
-      ctx.beginPath(); ctx.arc(0,0,ringR,0,Math.PI*2); ctx.stroke();
-      // Dashes on outer ring
-      if (ring===4) {
-        for(let d=0;d<8;d++){
-          const da=d/8*Math.PI*2;
-          ctx.beginPath(); ctx.moveTo(Math.cos(da)*ringR*0.85,Math.sin(da)*ringR*0.85);
-          ctx.lineTo(Math.cos(da)*ringR,Math.sin(da)*ringR); ctx.stroke();
-        }
-      }
-      ctx.restore();
-    }
-    // Swirling inner fill
-    const ig = ctx.createRadialGradient(0,0,0,0,0,wh.r*0.55);
-    ig.addColorStop(0,'rgba(180,80,255,0.8)');
-    ig.addColorStop(0.4,'rgba(0,200,255,0.5)');
-    ig.addColorStop(0.8,'rgba(255,80,160,0.3)');
-    ig.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.globalAlpha=0.85+0.15*Math.sin(t*4);
-    ctx.fillStyle=ig;
-    ctx.beginPath(); ctx.arc(0,0,wh.r*0.55,0,Math.PI*2); ctx.fill();
-    // Label
-    ctx.globalAlpha=0.9;
-    ctx.font='bold 10px "Courier New"';
-    ctx.fillStyle='#ff88ff';
-    ctx.shadowColor='#cc00ff'; ctx.shadowBlur=10;
-    ctx.textAlign='center';
-    ctx.fillText('WORMHOLE', 0, -wh.r-10);
-    ctx.restore();
-  }
-
-  // Obstacles
-  for (const o of obs) {
-    ctx.save();
-    let fillColor, glowColor, strokeColor;
-    if (o.type === 'fast') {
-      // Gold / yellow
-      const pulse = .7 + .3*Math.sin(now*.01);
-      fillColor   = `rgba(255,220,0,${pulse})`;
-      glowColor   = '#ffdd00';
-      strokeColor = 'rgba(255,255,180,.9)';
-    } else if (o.type === 'moving') {
-      // Blue / cyan
-      const hue = o.hue;
-      fillColor   = `hsl(${hue},100%,55%)`;
-      glowColor   = `hsl(${hue},100%,60%)`;
-      strokeColor = `hsla(${hue+20},100%,80%,.7)`;
-    } else if (o.type === 'gap') {
-      // Purple / magenta
-      fillColor   = 'hsl(290,100%,55%)';
-      glowColor   = '#cc00ff';
-      strokeColor = 'rgba(220,150,255,.8)';
-    } else {
-      // Normal red/orange
-      const hue = o.hue;
-      fillColor   = `hsl(${hue},100%,50%)`;
-      glowColor   = `hsl(${hue},100%,55%)`;
-      strokeColor = `hsla(${hue+20},100%,80%,.6)`;
-    }
-    // Rainbow override in wormhole mode
-    if (wormholeMode) {
-      const rwHue = (now*0.3 + o.x*0.1) % 360;
-      fillColor = `hsl(${rwHue},100%,55%)`;
-      glowColor = `hsl(${rwHue},100%,60%)`;
-      strokeColor = `hsl(${(rwHue+60)%360},100%,80%)`;
-    }
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = o.type==='fast' ? 25 : 18;
-    ctx.fillStyle = fillColor;
-    ctx.fillRect(o.x, o.y, o.w, o.h);
-    ctx.shadowBlur = o.type==='fast' ? 40 : 35;
-    ctx.globalAlpha = .35;
-    ctx.fillRect(o.x-2, o.y, o.w+4, o.h);
-    ctx.restore();
-    ctx.save();
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = o.type==='fast' ? 1.5 : 1;
-    ctx.strokeRect(o.x, o.y, o.w, o.h);
-    ctx.restore();
-  }
-
-  // Player
-  if (state===S.PLAY) {
-    const t = now*.003, pulse = .6+.4*Math.sin(t);
-    ctx.save();
-    ctx.shadowColor='#00ffff'; ctx.shadowBlur=40; ctx.globalAlpha=.15; ctx.fillStyle='#00ffff';
-    ctx.fillRect(player.x-8,player.y-8,player.w+16,player.h+16);
-    ctx.shadowBlur=25; ctx.globalAlpha=.3;
-    ctx.fillRect(player.x-4,player.y-4,player.w+8,player.h+8);
-    ctx.shadowBlur=20; ctx.globalAlpha=pulse;
-    const gr=ctx.createLinearGradient(player.x,player.y,player.x+player.w,player.y+player.h);
-    gr.addColorStop(0,'#aaffff'); gr.addColorStop(1,'#00ccff');
-    ctx.fillStyle=gr; ctx.fillRect(player.x,player.y,player.w,player.h);
-    ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.5; ctx.globalAlpha=.9; ctx.shadowBlur=8;
-    ctx.strokeRect(player.x+1,player.y+1,player.w-2,player.h-2);
-    ctx.globalAlpha=.2+.15*Math.sin(t*1.5); ctx.shadowBlur=60; ctx.fillStyle='#00ffff';
-    ctx.fillRect(player.x-15,player.y-15,player.w+30,player.h+30);
-    ctx.restore();
-  }
-
-  // Particles
-  for (const p of parts) {
-    ctx.save();
-    ctx.globalAlpha=Math.max(0,p.life); ctx.shadowColor=p.color; ctx.shadowBlur=14; ctx.fillStyle=p.color;
-    if (p.sq) { const sz=p.size*p.life; ctx.fillRect(p.x-sz/2,p.y-sz/2,sz,sz); }
-    else { ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life*.8,0,Math.PI*2); ctx.fill(); }
-    ctx.restore();
-  }
-
-  // Floating texts (close call, wormhole complete, etc.)
-  for (const f of floatTexts||[]) {
-    ctx.save();
-    ctx.globalAlpha = f.life;
-    ctx.font = f.big ? `bold ${Math.round(W*.025+14)}px "Courier New"` : 'bold 15px "Courier New"';
-    ctx.fillStyle = f.color;
-    ctx.shadowColor = f.color;
-    ctx.shadowBlur = f.big ? 30 : 12;
-    ctx.textAlign = 'center';
-    ctx.fillText(f.text, f.x, f.y);
-    ctx.restore();
-  }
-
-  // Wormhole countdown HUD
-  if (wormholeMode) {
-    const remaining = Math.ceil((wormholeEnd - now) / 1000);
-    const wormPulse = 0.7 + 0.3*Math.sin(now*0.008);
-    ctx.save();
-    ctx.textAlign='center';
-    ctx.font=`bold ${Math.round(W*.022+12)}px "Courier New"`;
-    ctx.fillStyle='#00ffff';
-    ctx.shadowColor='#00ffff'; ctx.shadowBlur=25;
-    ctx.globalAlpha=wormPulse;
-    ctx.fillText(`⟲ WORMHOLE: ${remaining}s`, W/2, 58);
-    ctx.restore();
-    // "WORMHOLE MODE" banner for first 2s
-    const wormEntryT = now - wormholeEnterTime;
-    if (wormEntryT < 2000) {
-      const wt = wormEntryT/2000;
-      const wa = wt<0.2 ? wt/0.2 : wt<0.7 ? 1 : 1-(wt-0.7)/0.3;
-      const ws = 1 + (1-wt)*0.5;
-      ctx.save();
-      ctx.globalAlpha=Math.max(0,wa);
-      ctx.translate(W/2,H/2);
-      ctx.scale(ws,ws);
-      ctx.textAlign='center';
-      ctx.font=`bold ${Math.round(W*.05+22)}px "Courier New"`;
-      ctx.fillStyle='#ff6bff';
-      ctx.shadowColor='#cc00ff'; ctx.shadowBlur=50;
-      ctx.fillText('WORMHOLE MODE', 0, -10);
-      ctx.font=`bold ${Math.round(W*.018+10)}px "Courier New"`;
-      ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffaa00'; ctx.shadowBlur=20;
-      ctx.fillText('5x SCORE MULTIPLIER', 0, 30);
-      ctx.restore();
-    }
-  }
-
-  // Wormhole exit bonus text
-  if (wormholeExitAnim > 0 && now - wormholeExitAnim < 2500) {
-    const et = (now - wormholeExitAnim)/2500;
-    const ea = et<0.15 ? et/0.15 : et<0.6 ? 1 : 1-(et-0.6)/0.4;
-    ctx.save();
-    ctx.globalAlpha=Math.max(0,ea);
-    ctx.textAlign='center';
-    ctx.font=`bold ${Math.round(W*.02+11)}px "Courier New"`;
-    ctx.fillStyle='#aaffff'; ctx.shadowColor='#00ffff'; ctx.shadowBlur=15;
-    ctx.fillText('BACK TO REALITY', W/2, H/2 + 60);
-    ctx.restore();
-  }
-
-  // Screen flash (white on enter, softer on exit)
-  if (screenFlash > 0) {
-    ctx.save();
-    ctx.globalAlpha = screenFlash * 0.9;
-    ctx.fillStyle = wormholeMode ? '#ffffff' : '#cc88ff';
-    ctx.fillRect(0,0,W,H);
-    ctx.restore();
-  }
-
-  // LEVEL UP animation (lasts 1.5s)
-  if (levelUpAnim > 0 && now - levelUpAnim < 1500) {
-    const t = (now - levelUpAnim) / 1500;
-    const alpha = t < 0.3 ? t/0.3 : t < 0.7 ? 1 : 1-(t-0.7)/0.3;
-    const scale = 1 + (1-t)*0.4;
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, alpha);
-    ctx.translate(W/2, H/2);
-    ctx.scale(scale, scale);
-    ctx.textAlign = 'center';
-    ctx.font = 'bold clamp(28px,4vw,52px) "Courier New"';
-    ctx.font = `bold ${Math.round(W*.04+18)}px "Courier New"`;
-    ctx.fillStyle = '#cc88ff';
-    ctx.shadowColor = '#aa44ff';
-    ctx.shadowBlur = 40;
-    ctx.fillText('LEVEL ' + level, 0, -20);
-    ctx.font = `bold ${Math.round(W*.02+10)}px "Courier New"`;
-    ctx.fillStyle = '#ffffff88';
-    ctx.shadowBlur = 10;
-    ctx.fillText('LEVEL UP!', 0, 20);
-    ctx.restore();
-  }
-
-  // NEW RECORD flash (shows during gameplay when best is broken)
-  if (state === S.PLAY && score > 0 && score > best && Math.sin(now*0.008)>0) {
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    ctx.font = `bold ${Math.round(W*.018+10)}px "Courier New"`;
-    ctx.fillStyle = '#ffcc00';
-    ctx.shadowColor = '#ffaa00';
-    ctx.shadowBlur = 20;
-    ctx.textAlign = 'center';
-    ctx.fillText('★ NEW RECORD! ★', W/2, 52);
-    ctx.restore();
-  }
-
+  if(state===S.START){for(const mo of menuObs){mo.x-=mo.spd;if(mo.x+mo.w<0){mo.x=W+mo.w;mo.y=Math.random()*H;}ctx.save();ctx.globalAlpha=mo.a;ctx.shadowColor=`hsl(${mo.hue},100%,55%)`;ctx.shadowBlur=12;ctx.fillStyle=`hsl(${mo.hue},100%,50%)`;ctx.fillRect(mo.x,mo.y,mo.w,mo.h);ctx.restore();}}
+  for(const s of dstars){s.x-=s.spd*(state===S.PLAY?(mult||1)*.5:.3);if(s.x<-4){s.x=W+4;s.y=Math.random()*H;}ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(255,255,255,${s.a})`;ctx.fill();}
+  if(state===S.PLAY&&elapsed>30){const fade=Math.min(1,(elapsed-30)/10);for(const sl of slines){sl.x-=sl.spd*(mult||1);if(sl.x+sl.len<0){sl.x=W+sl.len;sl.y=Math.random()*H;sl.len=80+Math.random()*200;sl.spd=10+Math.random()*16;}ctx.save();ctx.globalAlpha=sl.a*fade;ctx.strokeStyle='#ffffff';ctx.lineWidth=sl.w;ctx.beginPath();ctx.moveTo(sl.x,sl.y);ctx.lineTo(sl.x+sl.len,sl.y);ctx.stroke();ctx.restore();}}
+  ctx.strokeStyle='#00ffff08';ctx.lineWidth=.5;const gs=80,gspd=state===S.PLAY?curSpd:baseSpd||W*.004;const off=(now*gspd*.3)%gs;for(let x=-off;x<W;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}for(let y=0;y<H;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  if(trail&&trail.length>1){for(let i=1;i<trail.length;i++){const t=trail[i];const a=(1-i/6)*.5;const sh=i*1.5;const tc=wormholeMode?`hsl(${(now*0.5+i*40)%360},100%,65%)`:'#00ffff';ctx.save();ctx.globalAlpha=a;ctx.shadowColor=tc;ctx.shadowBlur=10;ctx.fillStyle=tc;ctx.fillRect(t.x+sh*.5,t.y+sh*.5,player.w-sh,player.h-sh);ctx.restore();}}
+  if(warnFlash>0&&now<warnFlash){const t=(warnFlash-now)/500;if(Math.sin(now*0.025)>0){ctx.save();ctx.globalAlpha=t*0.95;ctx.font='bold '+Math.round(W*.03+16)+'px "Courier New"';ctx.fillStyle='#ff2200';ctx.shadowColor='#ff2200';ctx.shadowBlur=30;ctx.textAlign='right';ctx.fillText('WARNING',W-30,H/2);ctx.font='bold '+Math.round(W*.015+10)+'px "Courier New"';ctx.fillStyle='#ff6600';ctx.shadowBlur=15;ctx.fillText('FAST OBSTACLE INCOMING',W-30,H/2+Math.round(W*.025+20));ctx.restore();}}
+  if(wormhole){const wh=wormhole,t=now*0.001;ctx.save();ctx.translate(wh.x,wh.y);for(let ring=4;ring>=0;ring--){const ringR=wh.r*(0.4+ring*0.15);const ringRot=wh.rot*(ring%2===0?1:-1.3)+ring*0.8;const ringHue=[280,190,330,210,300][ring];ctx.save();ctx.rotate(ringRot);ctx.strokeStyle=`hsl(${ringHue},100%,65%)`;ctx.lineWidth=ring===0?3:2;ctx.shadowColor=`hsl(${ringHue},100%,60%)`;ctx.shadowBlur=18;ctx.globalAlpha=0.6+0.4*Math.sin(t*3+ring);ctx.beginPath();ctx.arc(0,0,ringR,0,Math.PI*2);ctx.stroke();if(ring===4){for(let d=0;d<8;d++){const da=d/8*Math.PI*2;ctx.beginPath();ctx.moveTo(Math.cos(da)*ringR*0.85,Math.sin(da)*ringR*0.85);ctx.lineTo(Math.cos(da)*ringR,Math.sin(da)*ringR);ctx.stroke();}}ctx.restore();}const ig=ctx.createRadialGradient(0,0,0,0,0,wh.r*0.55);ig.addColorStop(0,'rgba(180,80,255,0.8)');ig.addColorStop(0.4,'rgba(0,200,255,0.5)');ig.addColorStop(0.8,'rgba(255,80,160,0.3)');ig.addColorStop(1,'rgba(0,0,0,0)');ctx.globalAlpha=0.85+0.15*Math.sin(t*4);ctx.fillStyle=ig;ctx.beginPath();ctx.arc(0,0,wh.r*0.55,0,Math.PI*2);ctx.fill();ctx.globalAlpha=0.9;ctx.font='bold 10px "Courier New"';ctx.fillStyle='#ff88ff';ctx.shadowColor='#cc00ff';ctx.shadowBlur=10;ctx.textAlign='center';ctx.fillText('WORMHOLE',0,-wh.r-10);ctx.restore();}
+  for(const o of obs){ctx.save();let fc,gc,sc2;if(o.type==='fast'){const p=.7+.3*Math.sin(now*.01);fc=`rgba(255,220,0,${p})`;gc='#ffdd00';sc2='rgba(255,255,180,.9)';}else if(o.type==='moving'){fc=`hsl(${o.hue},100%,55%)`;gc=`hsl(${o.hue},100%,60%)`;sc2=`hsla(${o.hue+20},100%,80%,.7)`;}else if(o.type==='gap'){fc='hsl(290,100%,55%)';gc='#cc00ff';sc2='rgba(220,150,255,.8)';}else{fc=`hsl(${o.hue},100%,50%)`;gc=`hsl(${o.hue},100%,55%)`;sc2=`hsla(${o.hue+20},100%,80%,.6)`;}if(wormholeMode){const rh=(now*0.3+o.x*0.1)%360;fc=`hsl(${rh},100%,55%)`;gc=`hsl(${rh},100%,60%)`;sc2=`hsl(${(rh+60)%360},100%,80%)`;}ctx.shadowColor=gc;ctx.shadowBlur=o.type==='fast'?25:18;ctx.fillStyle=fc;ctx.fillRect(o.x,o.y,o.w,o.h);ctx.shadowBlur=o.type==='fast'?40:35;ctx.globalAlpha=.35;ctx.fillRect(o.x-2,o.y,o.w+4,o.h);ctx.restore();ctx.save();ctx.strokeStyle=sc2;ctx.lineWidth=o.type==='fast'?1.5:1;ctx.strokeRect(o.x,o.y,o.w,o.h);ctx.restore();}
+  if(state===S.PLAY){const t=now*.003,pulse=.6+.4*Math.sin(t);ctx.save();ctx.shadowColor='#00ffff';ctx.shadowBlur=40;ctx.globalAlpha=.15;ctx.fillStyle='#00ffff';ctx.fillRect(player.x-8,player.y-8,player.w+16,player.h+16);ctx.shadowBlur=25;ctx.globalAlpha=.3;ctx.fillRect(player.x-4,player.y-4,player.w+8,player.h+8);ctx.shadowBlur=20;ctx.globalAlpha=pulse;const gr=ctx.createLinearGradient(player.x,player.y,player.x+player.w,player.y+player.h);gr.addColorStop(0,'#aaffff');gr.addColorStop(1,'#00ccff');ctx.fillStyle=gr;ctx.fillRect(player.x,player.y,player.w,player.h);ctx.strokeStyle='#ffffff';ctx.lineWidth=1.5;ctx.globalAlpha=.9;ctx.shadowBlur=8;ctx.strokeRect(player.x+1,player.y+1,player.w-2,player.h-2);ctx.globalAlpha=.2+.15*Math.sin(t*1.5);ctx.shadowBlur=60;ctx.fillStyle='#00ffff';ctx.fillRect(player.x-15,player.y-15,player.w+30,player.h+30);ctx.restore();}
+  for(const p of parts){ctx.save();ctx.globalAlpha=Math.max(0,p.life);ctx.shadowColor=p.color;ctx.shadowBlur=14;ctx.fillStyle=p.color;if(p.sq){const sz=p.size*p.life;ctx.fillRect(p.x-sz/2,p.y-sz/2,sz,sz);}else{ctx.beginPath();ctx.arc(p.x,p.y,p.size*p.life*.8,0,Math.PI*2);ctx.fill();}ctx.restore();}
+  for(const f of floatTexts){ctx.save();ctx.globalAlpha=f.life;ctx.font=f.big?`bold ${Math.round(W*.025+14)}px "Courier New"`:'bold 15px "Courier New"';ctx.fillStyle=f.color;ctx.shadowColor=f.color;ctx.shadowBlur=f.big?30:12;ctx.textAlign='center';ctx.fillText(f.text,f.x,f.y);ctx.restore();}
+  if(wormholeMode){const remaining=Math.ceil((wormholeEnd-now)/1000);const wp=0.7+0.3*Math.sin(now*0.008);ctx.save();ctx.textAlign='center';ctx.font=`bold ${Math.round(W*.022+12)}px "Courier New"`;ctx.fillStyle='#00ffff';ctx.shadowColor='#00ffff';ctx.shadowBlur=25;ctx.globalAlpha=wp;ctx.fillText(`WORMHOLE: ${remaining}s`,W*0.75,58);ctx.restore();const wet=now-wormholeEnterTime;if(wet<2000){const wt=wet/2000;const wa=wt<0.2?wt/0.2:wt<0.7?1:1-(wt-0.7)/0.3;const ws=1+(1-wt)*0.5;ctx.save();ctx.globalAlpha=Math.max(0,wa);ctx.translate(W/2,H/2);ctx.scale(ws,ws);ctx.textAlign='center';ctx.font=`bold ${Math.round(W*.05+22)}px "Courier New"`;ctx.fillStyle='#ff6bff';ctx.shadowColor='#cc00ff';ctx.shadowBlur=50;ctx.fillText('WORMHOLE MODE',0,-10);ctx.font=`bold ${Math.round(W*.018+10)}px "Courier New"`;ctx.fillStyle='#ffd700';ctx.shadowColor='#ffaa00';ctx.shadowBlur=20;ctx.fillText('5x SCORE MULTIPLIER',0,30);ctx.restore();}}
+  if(wormholeExitAnim>0&&now-wormholeExitAnim<2500){const et=(now-wormholeExitAnim)/2500;const ea=et<0.15?et/0.15:et<0.6?1:1-(et-0.6)/0.4;ctx.save();ctx.globalAlpha=Math.max(0,ea);ctx.textAlign='center';ctx.font=`bold ${Math.round(W*.02+11)}px "Courier New"`;ctx.fillStyle='#aaffff';ctx.shadowColor='#00ffff';ctx.shadowBlur=15;ctx.fillText('BACK TO REALITY',W/2,H/2+60);ctx.restore();}
+  if(screenFlash>0){ctx.save();ctx.globalAlpha=screenFlash*0.9;ctx.fillStyle=wormholeMode?'#ffffff':'#cc88ff';ctx.fillRect(0,0,W,H);ctx.restore();}
+  if(levelUpAnim>0&&now-levelUpAnim<1500){const t=(now-levelUpAnim)/1500;const alpha=t<0.3?t/0.3:t<0.7?1:1-(t-0.7)/0.3;const scale=1+(1-t)*0.4;ctx.save();ctx.globalAlpha=Math.max(0,alpha);ctx.translate(W/2,H/2);ctx.scale(scale,scale);ctx.textAlign='center';ctx.font=`bold ${Math.round(W*.04+18)}px "Courier New"`;ctx.fillStyle='#cc88ff';ctx.shadowColor='#aa44ff';ctx.shadowBlur=40;ctx.fillText('LEVEL '+level,0,-20);ctx.font=`bold ${Math.round(W*.02+10)}px "Courier New"`;ctx.fillStyle='#ffffff88';ctx.shadowBlur=10;ctx.fillText('LEVEL UP!',0,20);ctx.restore();}
+  if(state===S.PLAY&&score>0&&score>best&&Math.sin(now*0.008)>0){ctx.save();ctx.globalAlpha=0.85;ctx.font=`bold ${Math.round(W*.018+10)}px "Courier New"`;ctx.fillStyle='#ffcc00';ctx.shadowColor='#ffaa00';ctx.shadowBlur=20;ctx.textAlign='center';ctx.fillText('NEW RECORD!',W/2,52);ctx.restore();}
   ctx.restore();
 }
 
-function loop(now) {
+// REPLAY ENGINE
+function initRC(){if(!RC){RC=document.getElementById('replay-canvas');RX=RC.getContext('2d');}}
+function openReplay(){
+  if(replayFrames.length<2)return;
+  initRC();RC.width=window.innerWidth;RC.height=window.innerHeight;
+  document.getElementById('replay-overlay').classList.add('visible');
+  replayCurFrame=0;replayPlaying=true;replaySpeedIdx=0;
+  document.getElementById('btn-play').textContent='PAUSE';
+  document.getElementById('btn-speed').textContent=REPLAY_SPEED_LABELS[0];
+  const scrub=document.getElementById('replay-scrub');scrub.max=replayFrames.length-1;scrub.value=0;
+  if(replayRAF){cancelAnimationFrame(replayRAF);replayRAF=null;}
+  replayRAF=requestAnimationFrame(t=>{replayLastT=t;replayRAF=requestAnimationFrame(replayTick);});
+}
+function replayTick(now){
+  if(!document.getElementById('replay-overlay').classList.contains('visible'))return;
+  if(replayPlaying){const dt=Math.min(now-replayLastT,100);replayLastT=now;replayCurFrame+=(dt/REPLAY_INTERVAL)*REPLAY_SPEEDS[replaySpeedIdx];if(replayCurFrame>=replayFrames.length-1){replayCurFrame=0;replayLastT=now;}const scrub=document.getElementById('replay-scrub');if(scrub&&Math.floor(replayCurFrame)%5===0)scrub.value=Math.floor(replayCurFrame);}else{replayLastT=now;}
+  drawReplayFrame(replayCurFrame);replayRAF=requestAnimationFrame(replayTick);
+}
+function replayToggle(){replayPlaying=!replayPlaying;document.getElementById('btn-play').textContent=replayPlaying?'PAUSE':'PLAY';replayLastT=performance.now();}
+function replayScrub(val){replayCurFrame=parseFloat(val);drawReplayFrame(replayCurFrame);}
+function replayCycleSpeed(){replaySpeedIdx=(replaySpeedIdx+1)%REPLAY_SPEEDS.length;document.getElementById('btn-speed').textContent=REPLAY_SPEED_LABELS[replaySpeedIdx];}
+function closeReplay(){document.getElementById('replay-overlay').classList.remove('visible');if(replayRAF){cancelAnimationFrame(replayRAF);replayRAF=null;}replayPlaying=false;}
+
+function drawReplayFrame(frameF){
+  if(!RX)return;
+  const fi=Math.floor(frameF),ft=frameF-fi;
+  const f0=replayFrames[Math.min(fi,replayFrames.length-1)];
+  const f1=replayFrames[Math.min(fi+1,replayFrames.length-1)];
+  if(!f0)return;
+  const RW=RC.width,RH=RC.height,sx=RW/W,sy=RH/H;
+  if(f0.wm){RX.fillStyle='#0a0a2e';RX.fillRect(0,0,RW,RH);const cx=RW/2,cy=RH/2,tT=fi/REPLAY_FPS;const tC=['#9b59ff','#00e5ff','#ff6b9d','#cc00ff'];for(let r=0;r<8;r++){const phase=(r/8+tT*0.6)%1,rad=phase*Math.max(RW,RH)*0.85;RX.save();RX.globalAlpha=(1-phase)*0.5;RX.strokeStyle=tC[r%tC.length];RX.lineWidth=2;RX.shadowColor=tC[r%tC.length];RX.shadowBlur=6;RX.beginPath();RX.ellipse(cx,cy,rad,rad*0.55,0,0,Math.PI*2);RX.stroke();RX.restore();}}
+  else{const bgC=BG_HUES[f0.bg]||BG_HUES[0];RX.fillStyle=`rgb(${bgC[0]},${bgC[1]},${bgC[2]})`;RX.fillRect(0,0,RW,RH);RX.strokeStyle='#00ffff06';RX.lineWidth=0.5;const g2=Math.round(80*sx);for(let x=0;x<RW;x+=g2){RX.beginPath();RX.moveTo(x,0);RX.lineTo(x,RH);RX.stroke();}for(let y=0;y<RH;y+=Math.round(80*sy)){RX.beginPath();RX.moveTo(0,y);RX.lineTo(RW,y);RX.stroke();}}
+  const f1m=new Map();if(f1)for(const o of f1.ob)f1m.set(o.id,o);
+  for(let i=0;i<f0.ob.length;i++){const o0=f0.ob[i],o1=f1m.get(o0.id);const ox=o1?o0.x+(o1.x-o0.x)*ft:o0.x,oy=o1?o0.y+(o1.y-o0.y)*ft:o0.y;const alpha=o1?1:Math.max(0,1-ft*2);if(alpha<=0)continue;const rox=ox*sx,roy=oy*sy,rw=Math.max(1,o0.w*sx),rh=o0.h*sy;RX.save();RX.globalAlpha=alpha;const fc=f0.wm?`hsl(${(frameF*8+i*40)%360},100%,55%)`:o0.t==='fast'?'#ffdd00':o0.t==='moving'?`hsl(${o0.h2||200},100%,55%)`:o0.t==='gap'?'#cc00ff':`hsl(${o0.h2||10},100%,50%)`;RX.shadowColor=fc;RX.shadowBlur=6;RX.fillStyle=fc;RX.fillRect(rox,roy,rw,rh);RX.restore();}
+  const py2=(f0.py+(f1?f1.py-f0.py:0)*ft)*sy,px2=W*0.08*sx,pw2=30*sx,ph2=30*sy;
+  RX.save();RX.shadowColor=f0.wm?`hsl(${(frameF*10)%360},100%,60%)`:'#00ffff';RX.shadowBlur=10;RX.globalAlpha=0.9;const rg=RX.createLinearGradient(px2,py2,px2+pw2,py2+ph2);rg.addColorStop(0,'#aaffff');rg.addColorStop(1,'#00ccff');RX.fillStyle=rg;RX.fillRect(px2,py2,pw2,ph2);RX.strokeStyle='#ffffff';RX.lineWidth=1;RX.globalAlpha=0.7;RX.strokeRect(px2,py2,pw2,ph2);RX.restore();
+  RX.save();RX.font='bold 9px "Courier New"';RX.fillStyle='#00ffff';RX.shadowColor='#00ffff';RX.shadowBlur=6;RX.textAlign='left';RX.fillText(`${f0.sc}`,6,14);RX.fillStyle='#ffffff55';RX.shadowBlur=0;RX.fillText(`${f0.sm.toFixed(1)}x MULT  SPD ${f0.sp.toFixed(1)}x`,6,24);const prog=fi/Math.max(1,replayFrames.length-1);RX.fillStyle='#ffffff11';RX.fillRect(0,RH-3,RW,3);RX.fillStyle='#00ffff';RX.shadowBlur=4;RX.fillRect(0,RH-3,RW*prog,3);RX.textAlign='right';RX.fillStyle='#ffffff33';RX.shadowBlur=0;RX.fillText(`${Math.floor(fi/REPLAY_FPS)}s / ${replayRunTime}s`,RW-6,14);RX.restore();
+  RX.save();RX.globalAlpha=0.08;RX.font=`bold ${Math.round(RW*0.1)}px "Courier New"`;RX.fillStyle='#00ffff';RX.textAlign='center';RX.fillText('REPLAY',RW/2,RH/2+10);RX.restore();
+}
+
+function loop(now){
   requestAnimationFrame(loop);
-  if (state===S.PLAY) update(now);
+  if(state===S.PLAY)update(now);
   draw(now);
 }
 
 show('s-start');
 requestAnimationFrame(loop);
+document.body.setAttribute('tabindex','0');
+document.body.style.outline='none';
+setTimeout(()=>document.body.focus(),100);
+canvas.addEventListener('click',()=>document.body.focus());
+document.addEventListener('click',()=>document.body.focus());
 </script>
-<div id="watermark">Built with AI — Submit yours at vcac-app.vercel.app</div>
+<div id="watermark">Built with AI &mdash; Submit yours at vcac-app.vercel.app</div>
 </body>
 </html>
